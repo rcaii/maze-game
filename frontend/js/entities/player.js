@@ -353,10 +353,12 @@ const Player = {
                 const isFileProtocol = window.location.protocol === 'file:';
                 const useServerPath = !isFileProtocol || (typeof Multiplayer !== 'undefined' && Multiplayer.isOnlineMode);
                 
-                if (useServerPath && typeof Multiplayer !== 'undefined' && Multiplayer.serverBaseUrl) {
-                    const serverHost = Multiplayer.serverBaseUrl.replace('http://', '').replace(':8081', '');
-                    avatarPath = `http://${serverHost}:8081/${avatarPath}`;
-                }
+                // 头像图片直接使用前端托管的图片，不依赖服务器
+                // 这样可以避免混合内容问题
+                // if (useServerPath && typeof Multiplayer !== 'undefined' && Multiplayer.serverBaseUrl) {
+                //     const serverHost = Multiplayer.serverBaseUrl.replace('http://', '').replace(':8081', '');
+                //     avatarPath = `http://${serverHost}:8081/${avatarPath}`;
+                // }
                 // 否则使用相对路径（仅限本地文件访问）
             }
             const texture = textureLoader.load(avatarPath, 
@@ -392,10 +394,12 @@ const Player = {
                 const isFileProtocol = window.location.protocol === 'file:';
                 const useServerPath = !isFileProtocol || (typeof Multiplayer !== 'undefined' && Multiplayer.isOnlineMode);
                 
-                if (useServerPath && typeof Multiplayer !== 'undefined' && Multiplayer.serverBaseUrl) {
-                    const serverHost = Multiplayer.serverBaseUrl.replace('http://', '').replace(':8081', '');
-                    avatarPath = `http://${serverHost}:8081/${avatarPath}`;
-                }
+                // 头像图片直接使用前端托管的图片，不依赖服务器
+                // 这样可以避免混合内容问题
+                // if (useServerPath && typeof Multiplayer !== 'undefined' && Multiplayer.serverBaseUrl) {
+                //     const serverHost = Multiplayer.serverBaseUrl.replace('http://', '').replace(':8081', '');
+                //     avatarPath = `http://${serverHost}:8081/${avatarPath}`;
+                // }
             }
             
             const textureLoader = new THREE.TextureLoader();
