@@ -1,4 +1,5 @@
 // ==================== 多人游戏模块 ====================
+// 版本标识：v2.1 - 2026-02-01 14:20 - 添加版本日志和强制检查
 
 const Multiplayer = {
     ws: null,
@@ -19,9 +20,19 @@ const Multiplayer = {
     serverBaseUrl: 'http://localhost:8081',
     selectedCharacter: 1,
     defaultServerAddress: 'wss://maze-game-server-ut3f.onrender.com', // 生产环境服务器地址
+    VERSION: 'v2.1-20260201-1420', // 版本标识，用于确认代码是否更新
 
     // 初始化
     init() {
+        // 输出版本信息，确认代码已更新
+        console.log('%c=== LIFE 多人游戏模块初始化 ===', 'color: #4fc3f7; font-size: 16px; font-weight: bold;');
+        console.log('%c版本:', 'color: #81c784; font-weight: bold;', this.VERSION);
+        console.log('%c当前页面信息:', 'color: #81c784; font-weight: bold;', {
+            hostname: window.location.hostname,
+            protocol: window.location.protocol,
+            href: window.location.href
+        });
+        
         // 强制先检测服务器地址，确保 serverBaseUrl 正确设置
         this.detectServerAddress();
         
@@ -29,8 +40,18 @@ const Multiplayer = {
         const hostname = window.location.hostname;
         const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
         if (!isLocal && !this.serverBaseUrl.includes('onrender.com')) {
-            console.error('检测到 serverBaseUrl 设置错误，强制修复:', this.serverBaseUrl);
+            console.error('%c❌ 检测到 serverBaseUrl 设置错误，强制修复:', 'color: #e57373; font-size: 14px; font-weight: bold;', this.serverBaseUrl);
             this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+            console.log('%c✅ 已修复为:', 'color: #81c784; font-weight: bold;', this.serverBaseUrl);
+        }
+        
+        // 额外检查：如果 serverBaseUrl 包含当前页面的 hostname（这是错误的）
+        if (!isLocal && this.serverBaseUrl.includes(hostname)) {
+            console.error('%c❌ 严重错误：serverBaseUrl 包含当前页面 hostname！', 'color: #e57373; font-size: 16px; font-weight: bold;');
+            console.error('错误的 serverBaseUrl:', this.serverBaseUrl);
+            console.error('当前页面 hostname:', hostname);
+            this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+            console.log('%c✅ 已强制修复为 Render 服务器地址', 'color: #81c784; font-weight: bold;', this.serverBaseUrl);
         }
         
         // 然后显示通知
