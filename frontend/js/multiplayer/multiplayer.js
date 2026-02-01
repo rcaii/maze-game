@@ -230,13 +230,23 @@ const Multiplayer = {
         const serverInput = document.getElementById('serverInput');
         let wsAddress = serverInput ? serverInput.value.trim() : '';
         
+        // 如果没有配置或配置无效，使用自动检测的地址
         if (!wsAddress || wsAddress === '' || (!wsAddress.startsWith('ws://') && !wsAddress.startsWith('wss://'))) {
             const hostname = window.location.hostname;
-            if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
+            const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+            
+            if (isLocal) {
                 wsAddress = 'ws://localhost:8080';
             } else {
-                wsAddress = `ws://${hostname}:8080`;
+                // 生产环境必须使用 wss://
+                wsAddress = this.defaultServerAddress;
             }
+            if (serverInput) serverInput.value = wsAddress;
+        }
+        
+        // 确保HTTPS页面使用wss://
+        if (window.location.protocol === 'https:' && wsAddress.startsWith('ws://')) {
+            wsAddress = wsAddress.replace('ws://', 'wss://');
             if (serverInput) serverInput.value = wsAddress;
         }
         
@@ -253,14 +263,24 @@ const Multiplayer = {
         
         if (!wsAddress || wsAddress === '') {
             const hostname = window.location.hostname;
-            if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
+            const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+            
+            if (isLocal) {
                 wsAddress = 'ws://localhost:8080';
             } else {
-                wsAddress = `ws://${hostname}:8080`;
+                // 生产环境必须使用 wss://
+                wsAddress = this.defaultServerAddress;
             }
             if (serverInput) serverInput.value = wsAddress;
             if (configInput) configInput.value = wsAddress;
         } else {
+            if (serverInput) serverInput.value = wsAddress;
+            if (configInput) configInput.value = wsAddress;
+        }
+        
+        // 确保HTTPS页面使用wss://
+        if (window.location.protocol === 'https:' && wsAddress.startsWith('ws://')) {
+            wsAddress = wsAddress.replace('ws://', 'wss://');
             if (serverInput) serverInput.value = wsAddress;
             if (configInput) configInput.value = wsAddress;
         }
