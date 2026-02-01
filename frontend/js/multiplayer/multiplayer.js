@@ -80,12 +80,22 @@ const Multiplayer = {
             this.serverBaseUrl = this.serverBaseUrl.replace('http://', 'https://');
         }
         
-        console.log('服务器地址已设置:', {
+        console.log('%c服务器地址已设置:', 'color: #4fc3f7; font-weight: bold;', {
             hostname: hostname,
             isLocal: isLocal,
             serverBaseUrl: this.serverBaseUrl,
-            wsAddress: serverInput ? serverInput.value : 'N/A'
+            wsAddress: serverInput ? serverInput.value : 'N/A',
+            version: this.VERSION
         });
+        
+        // 额外检查：如果 serverBaseUrl 包含当前页面的 hostname（这是错误的）
+        if (!isLocal && this.serverBaseUrl.includes(hostname)) {
+            console.error('%c❌ 严重错误：serverBaseUrl 包含当前页面 hostname！', 'color: #e57373; font-size: 16px; font-weight: bold;');
+            console.error('错误的 serverBaseUrl:', this.serverBaseUrl);
+            console.error('当前页面 hostname:', hostname);
+            this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+            console.log('%c✅ 已强制修复为 Render 服务器地址', 'color: #81c784; font-weight: bold;', this.serverBaseUrl);
+        }
     },
 
     // 显示Render免费版提示
