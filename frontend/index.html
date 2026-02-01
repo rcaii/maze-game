@@ -9,7 +9,7 @@
 <body>
     <div id="game-container"></div>
     <div id="lobby">
-        <div id="version-info">v2.2</div>
+        <div id="version-info">加载中...</div>
         <h1>LIFE - 多人竞速</h1>
         
         <!-- 房间列表视图 -->
@@ -110,8 +110,23 @@
     
     <!-- 初始化 -->
     <script>
+        // 立即更新版本号（如果 Multiplayer 已加载）
+        function updateVersionInfo() {
+            if (typeof Multiplayer !== 'undefined' && Multiplayer.VERSION) {
+                const versionInfo = document.getElementById('version-info');
+                if (versionInfo) {
+                    versionInfo.textContent = Multiplayer.VERSION;
+                }
+            }
+        }
+        
+        // 尝试立即更新版本号
+        updateVersionInfo();
+        
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
+            // 再次确保版本号已更新
+            updateVersionInfo();
             UI.init();
             Multiplayer.init();
         });
