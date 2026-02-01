@@ -22,10 +22,14 @@ const Multiplayer = {
 
     // 初始化
     init() {
+        // 先检测服务器地址，确保 serverBaseUrl 正确设置
         this.detectServerAddress();
+        // 然后显示通知
         this.showRenderNotification();
-        this.refreshRoomList();
+        // 更新头像图片（使用前端托管的图片，不依赖服务器）
         this.updateAvatarImages();
+        // 最后刷新房间列表
+        this.refreshRoomList();
     },
 
     // 自动检测服务器地址
@@ -120,25 +124,13 @@ const Multiplayer = {
 
     // 更新头像图片
     updateAvatarImages() {
-        const isFileProtocol = window.location.protocol === 'file:';
-        const useServerPath = !isFileProtocol || this.isOnlineMode;
-        
+        // 头像图片直接使用前端托管的图片，不依赖服务器
+        // 这样可以避免混合内容问题，且加载更快
         for (let i = 1; i <= 5; i++) {
             const img = document.getElementById(`avatar-${i}`);
             if (img) {
-                if (useServerPath && this.serverBaseUrl) {
-                    // Render服务器：直接使用baseUrl（已经是HTTPS）
-                    if (this.serverBaseUrl.includes('onrender.com')) {
-                        img.src = `${this.serverBaseUrl}/assets/images/${i}.jpg`;
-                    } else {
-                        // 本地服务器：根据页面协议选择
-                        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-                        const serverHost = this.serverBaseUrl.replace('http://', '').replace('https://', '').replace(':8081', '');
-                        img.src = `${protocol}//${serverHost}:8081/assets/images/${i}.jpg`;
-                    }
-                } else {
-                    img.src = `assets/images/${i}.jpg`;
-                }
+                // 直接使用相对路径，图片已经部署在前端
+                img.src = `assets/images/${i}.jpg`;
             }
         }
     },
