@@ -1,30 +1,44 @@
 // ==================== 多人游戏模块 ====================
-// 版本标识：v2.2 - 2026-02-01 - 修复HTTPS混合内容和服务器连接问题
+// 版本标识：v2.4 - 2026-02-01
 
 const Multiplayer = {
+    // WebSocket 连接
     ws: null,
     playerId: null,
     roomId: null,
+    
+    // 玩家信息
     selectedColor: '0x4fc3f7',
-    otherPlayers: {},
-    isOnlineMode: false,
-    gameStartTime: null,
+    selectedCharacter: 1,
     playerName: 'Player' + Math.floor(Math.random() * 1000),
+    
+    // 游戏状态
+    isOnlineMode: false,
     isGameStarted: false,
     isPlayerReady: false,
+    gameStartTime: null,
+    
+    // 房间信息
     roomPlayers: [],
-    serverMazes: null,
-    lastPositionUpdate: 0,
     currentView: 'room-list',
     selectedRoomId: null,
-    serverBaseUrl: 'https://localhost:8081', // 默认值，会在init()中根据环境自动设置
-    selectedCharacter: 1,
-    defaultServerAddress: 'wss://maze-game-server-ut3f.onrender.com', // 生产环境服务器地址（WSS，无端口）
-    VERSION: 'v2.4-20260201', // 版本标识 - 强制使用 Render 服务器
-
-    // ==================== 辅助方法 ====================
     
-    // 生产环境服务器配置（硬编码，确保不会被错误覆盖）
+    // 其他玩家
+    otherPlayers: {},
+    
+    // 服务器配置
+    serverBaseUrl: 'https://localhost:8081',
+    serverMazes: null,
+    
+    // 位置更新节流
+    lastPositionUpdate: 0,
+    
+    // 版本信息
+    VERSION: 'v2.4-20260201',
+    
+    // ==================== 服务器配置 ====================
+    
+    // 生产环境服务器配置
     RENDER_SERVER: {
         baseUrl: 'https://maze-game-server-ut3f.onrender.com',
         wsUrl: 'wss://maze-game-server-ut3f.onrender.com'
@@ -36,28 +50,22 @@ const Multiplayer = {
         wsUrl: 'ws://localhost:8080'
     },
     
+    // 连接超时配置（毫秒）
+    CONNECTION_TIMEOUT: {
+        RENDER: 35000,
+        LOCAL: 5000
+    },
+    
+    // 位置更新节流间隔（毫秒）
+    POSITION_UPDATE_INTERVAL: 200,
+    
     // 判断是否为本地环境
-    // 强制返回 false，让所有环境都使用 Render 服务器
     isLocalEnvironment() {
-        // 始终返回 false，强制使用 Render 服务器（无论是本地还是生产环境）
+        // 强制使用 Render 服务器（所有环境）
         return false;
-        
-        // 如需恢复本地开发模式，取消下面代码的注释，并注释掉上面的 return false
-        /*
-        const hostname = window.location.hostname;
-        // 明确排除云平台域名（tcloudbaseapp.com, onrender.com 等）
-        if (hostname.includes('tcloudbaseapp.com') || 
-            hostname.includes('onrender.com') || 
-            hostname.includes('vercel.app') ||
-            hostname.includes('netlify.app') ||
-            hostname.includes('github.io')) {
-            return false;
-        }
-        return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
-        */
     },
 
-    // 获取服务器配置（统一方法）- 生产环境强制使用 Render 服务器
+    // 获取服务器配置
     getServerConfig() {
         if (this.isLocalEnvironment()) {
             return {
@@ -66,7 +74,6 @@ const Multiplayer = {
                 isRenderServer: false
             };
         }
-        // 生产环境：始终返回 Render 服务器配置，无论当前 serverBaseUrl 是什么
         return {
             serverBaseUrl: this.RENDER_SERVER.baseUrl,
             wsAddress: this.RENDER_SERVER.wsUrl,
@@ -77,60 +84,45 @@ const Multiplayer = {
     // 清理 URL，移除端口号（生产环境）
     cleanUrl(url) {
         if (!url) return url;
-        // 生产环境：移除所有端口号
         if (!this.isLocalEnvironment()) {
-            // 匹配协议://域名:端口/路径 或 协议://域名:端口
-            // 移除 :端口号（包括 :443, :80, :8081 等所有端口）
+            // 移除 HTTP/HTTPS 端口号
             url = url.replace(/(https?:\/\/[^\/:]+):\d+(\/|$)/g, '$1$2');
-            // 处理 WebSocket URL (ws:// 或 wss://)
+            // 移除 WebSocket 端口号
             url = url.replace(/(wss?:\/\/[^\/:]+):\d+(\/|$)/g, '$1$2');
         }
         return url;
     },
 
-    // 获取 API URL（强制生产环境使用 Render，确保 HTTPS，无端口号）
+    // 获取 API URL
     getApiUrl() {
         if (this.isLocalEnvironment()) {
             return this.LOCAL_SERVER.baseUrl;
         }
-        // 生产环境：直接返回硬编码的 Render 服务器地址，不使用 this.serverBaseUrl
-        // 强制确保使用 HTTPS，并移除端口号
         let url = this.RENDER_SERVER.baseUrl;
-        // 如果 URL 不是以 https:// 开头，强制修复
         if (!url.startsWith('https://')) {
             url = url.replace(/^http:\/\//, 'https://');
         }
-        // 移除端口号
-        url = this.cleanUrl(url);
-        return url;
+        return this.cleanUrl(url);
     },
 
-    // 获取 WebSocket URL（强制生产环境使用 Render，无端口号）
+    // 获取 WebSocket URL
     getWebSocketUrl() {
         if (this.isLocalEnvironment()) {
             return this.LOCAL_SERVER.wsUrl;
         }
-        // 生产环境：直接返回硬编码的 Render 服务器地址，并移除端口号
-        let url = this.RENDER_SERVER.wsUrl;
-        url = this.cleanUrl(url);
-        return url;
+        return this.cleanUrl(this.RENDER_SERVER.wsUrl);
     },
 
-    // 验证和修复WebSocket地址
+    // 验证和修复 WebSocket 地址
     validateAndFixWebSocketAddress(address) {
-        // 生产环境：始终返回 Render 服务器地址，并移除端口号
         if (!this.isLocalEnvironment()) {
-            let url = this.RENDER_SERVER.wsUrl;
-            url = this.cleanUrl(url);
-            return url;
+            return this.cleanUrl(this.RENDER_SERVER.wsUrl);
         }
         
-        // 本地环境处理
         if (!address || (!address.startsWith('ws://') && !address.startsWith('wss://'))) {
             return this.LOCAL_SERVER.wsUrl;
         }
         
-        // 确保本地环境使用 ws://
         if (address.startsWith('wss://')) {
             return address.replace('wss://', 'ws://');
         }
@@ -146,39 +138,36 @@ const Multiplayer = {
         if (configInput) configInput.value = wsAddress;
     },
 
-    // 确保serverBaseUrl正确设置
+    // 确保 serverBaseUrl 正确设置
     ensureServerBaseUrl() {
         if (!this.isLocalEnvironment()) {
-            // 生产环境：强制使用 Render 服务器，并确保使用 HTTPS，无端口号
             let correctUrl = this.RENDER_SERVER.baseUrl;
-            // 强制确保使用 HTTPS
             if (!correctUrl.startsWith('https://')) {
                 correctUrl = correctUrl.replace(/^http:\/\//, 'https://');
             }
-            // 移除端口号
             correctUrl = this.cleanUrl(correctUrl);
+            
             if (this.serverBaseUrl !== correctUrl) {
                 console.warn('%c⚠️ 修正 serverBaseUrl:', 'color: #ffb74d; font-weight: bold;', 
                     this.serverBaseUrl, '→', correctUrl);
                 this.serverBaseUrl = correctUrl;
             }
-            // 额外检查：如果 serverBaseUrl 是 HTTP，强制改为 HTTPS
+            
             if (this.serverBaseUrl.startsWith('http://') && !this.serverBaseUrl.startsWith('https://')) {
                 console.warn('%c⚠️ 强制修复 HTTP 为 HTTPS:', 'color: #ffb74d; font-weight: bold;', 
                     this.serverBaseUrl, '→', this.serverBaseUrl.replace(/^http:\/\//, 'https://'));
                 this.serverBaseUrl = this.serverBaseUrl.replace(/^http:\/\//, 'https://');
             }
-            // 确保移除端口号
+            
             this.serverBaseUrl = this.cleanUrl(this.serverBaseUrl);
         } else {
-            // 本地环境：确保使用 localhost
             if (!this.serverBaseUrl.includes('localhost')) {
                 this.serverBaseUrl = this.LOCAL_SERVER.baseUrl;
             }
         }
     },
 
-    // 获取并配置服务器地址（统一入口）
+    // 配置服务器地址
     configureServerAddress() {
         const config = this.getServerConfig();
         this.serverBaseUrl = config.serverBaseUrl;
@@ -189,13 +178,11 @@ const Multiplayer = {
 
     // 初始化
     init() {
-        // 更新页面上的版本号显示
         const versionInfo = document.getElementById('version-info');
         if (versionInfo) {
             versionInfo.textContent = this.VERSION;
         }
         
-        // 输出版本信息，确认代码已更新
         console.log('%c=== LIFE 多人游戏模块初始化 ===', 'color: #4fc3f7; font-size: 16px; font-weight: bold;');
         console.log('%c版本:', 'color: #81c784; font-weight: bold;', this.VERSION);
         console.log('%c当前页面信息:', 'color: #81c784; font-weight: bold;', {
@@ -204,26 +191,20 @@ const Multiplayer = {
             href: window.location.href
         });
         
-        // 配置服务器地址
-        const config = this.configureServerAddress();
-        this.detectServerAddress(); // 保持兼容性，更新UI显示
-        
-        // 然后显示通知
+        this.configureServerAddress();
+        this.detectServerAddress();
         this.showRenderNotification();
-        // 更新头像图片（使用前端托管的图片，不依赖服务器）
         this.updateAvatarImages();
-        // 最后刷新房间列表
         this.refreshRoomList();
     },
 
-    // 自动检测服务器地址（更新UI显示）
+    // 检测并显示服务器地址
     detectServerAddress() {
         const config = this.configureServerAddress();
         const statusInfo = document.getElementById('server-status-info');
         const statusText = document.getElementById('server-status-text');
         
         if (config.isRenderServer) {
-            // 显示服务器状态信息
             if (statusInfo) statusInfo.style.display = 'block';
             if (statusText) {
                 statusText.innerHTML = '✅ 已自动连接到服务器: <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">' + config.wsAddress + '</code>';
@@ -241,65 +222,61 @@ const Multiplayer = {
         });
     },
 
-    // 显示Render免费版提示
+    // 显示 Render 免费版提示
     showRenderNotification() {
-        // 只在生产环境显示提示
-        if (!this.isLocalEnvironment()) {
-            const notification = document.createElement('div');
-            notification.id = 'render-notification';
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: rgba(255, 183, 77, 0.95);
-                color: #000;
-                padding: 15px 20px;
-                border-radius: 10px;
-                border: 2px solid #ffb74d;
-                max-width: 350px;
-                z-index: 10000;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-                font-size: 14px;
-                line-height: 1.5;
-            `;
-            notification.innerHTML = `
-                <div style="font-weight: bold; margin-bottom: 8px; display: flex; align-items: center;">
-                    <span style="font-size: 18px; margin-right: 8px;">⏰</span>
-                    <span>服务器提示</span>
-                    <button onclick="document.getElementById('render-notification').style.display='none'" 
-                            style="margin-left: auto; background: transparent; border: none; font-size: 20px; cursor: pointer; color: #000; padding: 0 5px;">×</button>
-                </div>
-                <div>
-                    使用免费版服务器，15分钟无活动会休眠。<br>
-                    <strong>首次连接或休眠后需要等待约30秒唤醒服务器</strong>，请耐心等待。
-                </div>
-            `;
-            document.body.appendChild(notification);
-            
-            // 5秒后自动隐藏（可选）
-            setTimeout(() => {
-                const notif = document.getElementById('render-notification');
-                if (notif) {
-                    notif.style.opacity = '0';
-                    notif.style.transition = 'opacity 0.5s';
-                    setTimeout(() => {
-                        if (notif.parentNode) {
-                            notif.parentNode.removeChild(notif);
-                        }
-                    }, 500);
-                }
-            }, 10000); // 10秒后自动隐藏
-        }
+        if (this.isLocalEnvironment()) return;
+        
+        const notification = document.createElement('div');
+        notification.id = 'render-notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 183, 77, 0.95);
+            color: #000;
+            padding: 15px 20px;
+            border-radius: 10px;
+            border: 2px solid #ffb74d;
+            max-width: 350px;
+            z-index: 10000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            font-size: 14px;
+            line-height: 1.5;
+        `;
+        notification.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 8px; display: flex; align-items: center;">
+                <span style="font-size: 18px; margin-right: 8px;">⏰</span>
+                <span>服务器提示</span>
+                <button onclick="document.getElementById('render-notification').style.display='none'" 
+                        style="margin-left: auto; background: transparent; border: none; font-size: 20px; cursor: pointer; color: #000; padding: 0 5px;">×</button>
+            </div>
+            <div>
+                使用免费版服务器，15分钟无活动会休眠。<br>
+                <strong>首次连接或休眠后需要等待约30秒唤醒服务器</strong>，请耐心等待。
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // 10秒后自动隐藏
+        setTimeout(() => {
+            const notif = document.getElementById('render-notification');
+            if (notif) {
+                notif.style.opacity = '0';
+                notif.style.transition = 'opacity 0.5s';
+                setTimeout(() => {
+                    if (notif.parentNode) {
+                        notif.parentNode.removeChild(notif);
+                    }
+                }, 500);
+            }
+        }, 10000);
     },
 
     // 更新头像图片
     updateAvatarImages() {
-        // 头像图片直接使用前端托管的图片，不依赖服务器
-        // 这样可以避免混合内容问题，且加载更快
         for (let i = 1; i <= 5; i++) {
             const img = document.getElementById(`avatar-${i}`);
             if (img) {
-                // 直接使用相对路径，图片已经部署在前端
                 img.src = `assets/images/${i}.jpg`;
             }
         }
@@ -310,24 +287,16 @@ const Multiplayer = {
         const roomListEl = document.getElementById('room-list');
         if (!roomListEl) return;
         
-        // 配置服务器地址
         const config = this.configureServerAddress();
-        this.detectServerAddress(); // 更新UI显示
+        this.detectServerAddress();
         
         roomListEl.innerHTML = '<p>正在加载房间列表...</p>';
         
-        // 使用 getApiUrl() 确保生产环境使用正确的服务器地址
         let apiUrl = this.getApiUrl();
-        
-        // 强制确保生产环境使用 HTTPS（防止混合内容错误）
-        if (!this.isLocalEnvironment()) {
-            // 如果当前页面是 HTTPS，强制 API URL 也使用 HTTPS
-            if (window.location.protocol === 'https:') {
-                apiUrl = apiUrl.replace(/^http:\/\//, 'https://');
-            }
-            // 确保移除端口号（生产环境不应该有端口号）
-            apiUrl = this.cleanUrl(apiUrl);
+        if (!this.isLocalEnvironment() && window.location.protocol === 'https:') {
+            apiUrl = apiUrl.replace(/^http:\/\//, 'https://');
         }
+        apiUrl = this.cleanUrl(apiUrl);
         
         console.log('刷新房间列表，使用API地址:', apiUrl + '/rooms', '当前环境:', this.isLocalEnvironment() ? '本地' : '生产', '页面协议:', window.location.protocol);
         
@@ -389,7 +358,6 @@ const Multiplayer = {
         this.selectedRoomId = roomId;
         this.currentView = 'room-detail';
         
-        // 切换到房间详情视图
         const roomListView = document.getElementById('room-list-view');
         const roomSection = document.getElementById('room-section');
         if (roomListView) roomListView.style.display = 'none';
@@ -399,7 +367,6 @@ const Multiplayer = {
             if (roomNameEl) roomNameEl.textContent = `房间: ${roomId}`;
         }
         
-        // 显示角色选择
         const characterSelection = document.getElementById('character-selection');
         if (characterSelection) {
             characterSelection.style.display = 'flex';
@@ -412,14 +379,9 @@ const Multiplayer = {
             }, 100);
         }
         
-        // 配置服务器地址
         this.configureServerAddress();
-        
-        // 获取 WebSocket 地址（生产环境强制使用 Render 服务器）
         const wsAddress = this.getWebSocketUrl();
         this.updateServerInputs(wsAddress);
-        
-        // 连接到房间
         this.connectToRoom(roomId, wsAddress);
     },
 
@@ -427,42 +389,6 @@ const Multiplayer = {
     createNewRoom() {
         const newRoomId = 'room_' + Math.random().toString(36).substr(2, 9);
         this.enterRoom(newRoomId);
-    },
-
-    // 保存服务器配置（已废弃，现在自动配置）
-    saveServerConfig() {
-        // 这个函数现在主要用于兼容性，实际配置已自动完成
-        const configInput = document.getElementById('serverConfigInput');
-        const serverAddress = configInput ? configInput.value.trim() : '';
-        
-        if (!serverAddress) {
-            // 如果没有输入，使用自动检测的地址
-            this.configureServerAddress();
-            this.detectServerAddress();
-            alert('已使用自动检测的服务器地址！');
-            return;
-        }
-        
-        if (!serverAddress.startsWith('ws://') && !serverAddress.startsWith('wss://')) {
-            alert('服务器地址格式错误！应以 ws:// 或 wss:// 开头');
-            return;
-        }
-        
-        // 验证和修复地址
-        const validatedAddress = this.validateAndFixWebSocketAddress(serverAddress);
-        this.updateServerInputs(validatedAddress);
-        
-        // 更新 serverBaseUrl
-        const config = this.getServerConfig();
-        if (validatedAddress.includes('onrender.com')) {
-            this.serverBaseUrl = config.serverBaseUrl;
-        } else if (validatedAddress.includes('localhost')) {
-            const wsMatch = validatedAddress.match(/(?:ws|wss):\/\/localhost(?::(\d+))?/);
-            const port = wsMatch && wsMatch[1] ? parseInt(wsMatch[1]) : 8080;
-            this.serverBaseUrl = `https://localhost:${port + 1}`;
-        }
-        
-        alert('服务器配置已保存！');
     },
 
     // 选择角色
@@ -474,17 +400,14 @@ const Multiplayer = {
             this.selectedColor = character.color;
         }
         
-        // 移除所有选中状态
         document.querySelectorAll('.character-option').forEach(opt => {
             opt.classList.remove('selected');
         });
         
-        // 添加选中状态
         const selectedOption = document.querySelector(`[data-character="${characterId}"]`);
         if (selectedOption) {
             selectedOption.classList.add('selected');
         }
-        
     },
 
     // 连接到房间
@@ -493,8 +416,6 @@ const Multiplayer = {
         const joinBtn = document.getElementById('join-btn');
         
         this.roomId = roomId;
-        
-        // 强制使用正确的 WebSocket 地址（生产环境使用 Render 服务器）
         const wsUrl = this.getWebSocketUrl();
         serverAddress = wsUrl;
         
@@ -519,8 +440,7 @@ const Multiplayer = {
             joinBtn.textContent = '连接中...';
         }
         
-        // Render服务器需要更长的超时时间（35秒）
-        const timeoutDuration = isRenderServer ? 35000 : 5000;
+        const timeoutDuration = isRenderServer ? this.CONNECTION_TIMEOUT.RENDER : this.CONNECTION_TIMEOUT.LOCAL;
         const connectionTimeout = setTimeout(() => {
             if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
                 this.ws.close();
@@ -650,19 +570,16 @@ const Multiplayer = {
         this.currentView = 'room-list';
         this.selectedRoomId = null;
         
-        // 断开连接
         if (this.ws) {
             this.ws.close();
             this.ws = null;
         }
         
-        // 切换到房间列表视图
         const roomListView = document.getElementById('room-list-view');
         const roomSection = document.getElementById('room-section');
         if (roomListView) roomListView.style.display = 'block';
         if (roomSection) roomSection.style.display = 'none';
         
-        // 刷新房间列表
         this.refreshRoomList();
     },
 
@@ -676,7 +593,7 @@ const Multiplayer = {
     // 发送位置更新
     sendPositionUpdate(position, level) {
         const now = Date.now();
-        if (now - this.lastPositionUpdate > 200) {
+        if (now - this.lastPositionUpdate > this.POSITION_UPDATE_INTERVAL) {
             this.lastPositionUpdate = now;
             this.sendMessage({
                 type: 'playerUpdate',
@@ -767,7 +684,11 @@ const Multiplayer = {
             listEl.appendChild(item);
         });
         
-        // 更新游戏状态按钮
+        this.updateGameStatus(players);
+    },
+    
+    // 更新游戏状态
+    updateGameStatus(players) {
         const statusEl = document.getElementById('game-status');
         if (!statusEl) return;
         
@@ -775,17 +696,18 @@ const Multiplayer = {
         
         if (players.length < 2) {
             statusEl.innerHTML = `<p style="color: #ffb74d;">等待更多玩家加入... (${players.length}/2)</p>`;
+            return;
+        }
+        
+        const allReady = players.every(p => p.ready);
+        const readyCount = players.filter(p => p.ready).length;
+        
+        if (!this.isPlayerReady) {
+            statusEl.innerHTML = `<button onclick="Multiplayer.setReady()" style="padding: 15px 30px; font-size: 18px; background: #81c784; color: #000; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">准备 (${readyCount}/${players.length})</button>`;
+        } else if (!allReady) {
+            statusEl.innerHTML = `<p style="color: #ffb74d;">等待其他玩家准备... (${readyCount}/${players.length})</p>`;
         } else {
-            const allReady = players.every(p => p.ready);
-            const readyCount = players.filter(p => p.ready).length;
-            
-            if (!this.isPlayerReady) {
-                statusEl.innerHTML = `<button onclick="Multiplayer.setReady()" style="padding: 15px 30px; font-size: 18px; background: #81c784; color: #000; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">准备 (${readyCount}/${players.length})</button>`;
-            } else if (!allReady) {
-                statusEl.innerHTML = `<p style="color: #ffb74d;">等待其他玩家准备... (${readyCount}/${players.length})</p>`;
-            } else {
-                statusEl.innerHTML = `<p style="color: #81c784; font-size: 18px; font-weight: bold;">所有人已准备！游戏即将开始...</p>`;
-            }
+            statusEl.innerHTML = `<p style="color: #81c784; font-size: 18px; font-weight: bold;">所有人已准备！游戏即将开始...</p>`;
         }
     },
 
@@ -805,6 +727,7 @@ const Multiplayer = {
     startMultiplayerGame(players, startLevel = 0) {
         this.isGameStarted = true;
         this.isPlayerReady = false;
+        
         const lobby = document.getElementById('lobby');
         const leaderboard = document.getElementById('leaderboard');
         if (lobby) lobby.classList.add('hidden');
@@ -812,12 +735,9 @@ const Multiplayer = {
         
         Game.gameStartTime = Date.now();
         this.gameStartTime = Date.now();
-        
-        // 确保从同一关卡开始
         Game.currentLevel = startLevel || 0;
         Game.init();
         
-        // 创建其他玩家
         players.forEach(p => {
             if (p.playerId !== this.playerId) {
                 this.createOtherPlayer(p.playerId, p.name, p.color, p.characterId);
@@ -838,7 +758,22 @@ const Multiplayer = {
             }
         }
         
-        // 添加名字标签
+        this.createNameLabel(humanoid, name);
+        
+        humanoid.position.set(0, 0, 0);
+        humanoid.userData = { playerId, name, level: 0 };
+        Game.scene.add(humanoid);
+        
+        this.otherPlayers[playerId] = {
+            humanoid: humanoid,
+            pos: { x: 0, z: 0 },
+            level: 0,
+            name: name
+        };
+    },
+    
+    // 创建名字标签
+    createNameLabel(humanoid, name) {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         canvas.width = 512;
@@ -872,17 +807,6 @@ const Multiplayer = {
         sprite.position.y = 1.8;
         sprite.scale.set(2.5, 0.6, 1);
         humanoid.add(sprite);
-        
-        humanoid.position.set(0, 0, 0);
-        humanoid.userData = { playerId, name, level: 0 };
-        Game.scene.add(humanoid);
-        
-        this.otherPlayers[playerId] = {
-            humanoid: humanoid,
-            pos: { x: 0, z: 0 },
-            level: 0,
-            name: name
-        };
     },
 
     // 更新其他玩家
@@ -892,35 +816,39 @@ const Multiplayer = {
         }
         
         const otherPlayer = this.otherPlayers[playerId];
-        if (otherPlayer) {
-            // 只显示同一关卡的玩家
-            if (level === Game.currentLevel) {
-                const levelConfig = LIFE_LEVELS[Game.currentLevel];
-                const mazeSize = levelConfig.mazeSize;
-                const offsetX = -(mazeSize - 1) * CONFIG.cellSize / 2;
-                const offsetZ = -(mazeSize - 1) * CONFIG.cellSize / 2;
-                
-                const targetX = position.x * CONFIG.cellSize + offsetX;
-                const targetZ = position.z * CONFIG.cellSize + offsetZ;
-                
-                const lerpFactor = 0.5;
-                otherPlayer.humanoid.position.x += (targetX - otherPlayer.humanoid.position.x) * lerpFactor;
-                otherPlayer.humanoid.position.z += (targetZ - otherPlayer.humanoid.position.z) * lerpFactor;
-                otherPlayer.humanoid.position.y = 0;
-                otherPlayer.humanoid.visible = true;
-                
-                otherPlayer.humanoid.traverse((child) => {
-                    if (child.material) {
-                        child.material.transparent = false;
-                        child.material.opacity = 1.0;
-                    }
-                });
-            } else {
-                otherPlayer.humanoid.visible = false;
+        if (!otherPlayer) return;
+        
+        otherPlayer.pos = position;
+        otherPlayer.level = level;
+        
+        // 只显示同一关卡的玩家
+        if (level === Game.currentLevel) {
+            if (otherPlayer.humanoid && !Game.scene.children.includes(otherPlayer.humanoid)) {
+                Game.scene.add(otherPlayer.humanoid);
             }
             
-            otherPlayer.pos = position;
-            otherPlayer.level = level;
+            const levelConfig = LIFE_LEVELS[Game.currentLevel];
+            const mazeSize = levelConfig.mazeSize;
+            const offsetX = -(mazeSize - 1) * CONFIG.cellSize / 2;
+            const offsetZ = -(mazeSize - 1) * CONFIG.cellSize / 2;
+            
+            const targetX = position.x * CONFIG.cellSize + offsetX;
+            const targetZ = position.z * CONFIG.cellSize + offsetZ;
+            
+            const lerpFactor = 0.5;
+            otherPlayer.humanoid.position.x += (targetX - otherPlayer.humanoid.position.x) * lerpFactor;
+            otherPlayer.humanoid.position.z += (targetZ - otherPlayer.humanoid.position.z) * lerpFactor;
+            otherPlayer.humanoid.position.y = 0;
+            otherPlayer.humanoid.visible = true;
+            
+            otherPlayer.humanoid.traverse((child) => {
+                if (child.material) {
+                    child.material.transparent = false;
+                    child.material.opacity = 1.0;
+                }
+            });
+        } else {
+            otherPlayer.humanoid.visible = false;
         }
     },
 
@@ -936,6 +864,37 @@ const Multiplayer = {
     updatePlayerLevel(playerId, level) {
         if (this.otherPlayers[playerId]) {
             this.otherPlayers[playerId].level = level;
+            
+            // 如果该玩家现在和当前玩家在同一关卡，确保其可见
+            if (level === Game.currentLevel && this.otherPlayers[playerId].humanoid) {
+                // 确保humanoid在场景中
+                if (!Game.scene.children.includes(this.otherPlayers[playerId].humanoid)) {
+                    Game.scene.add(this.otherPlayers[playerId].humanoid);
+                }
+                
+                // 更新位置并显示
+                const levelConfig = LIFE_LEVELS[Game.currentLevel];
+                const mazeSize = levelConfig.mazeSize;
+                const offsetX = -(mazeSize - 1) * CONFIG.cellSize / 2;
+                const offsetZ = -(mazeSize - 1) * CONFIG.cellSize / 2;
+                
+                const otherPlayer = this.otherPlayers[playerId];
+                const targetX = otherPlayer.pos.x * CONFIG.cellSize + offsetX;
+                const targetZ = otherPlayer.pos.z * CONFIG.cellSize + offsetZ;
+                
+                otherPlayer.humanoid.position.set(targetX, 0, targetZ);
+                otherPlayer.humanoid.visible = true;
+                
+                otherPlayer.humanoid.traverse((child) => {
+                    if (child.material) {
+                        child.material.transparent = false;
+                        child.material.opacity = 1.0;
+                    }
+                });
+            } else if (this.otherPlayers[playerId].humanoid) {
+                // 如果不在同一关卡，隐藏
+                this.otherPlayers[playerId].humanoid.visible = false;
+            }
         }
         if (typeof UI !== 'undefined' && UI.updateLeaderboard) {
             UI.updateLeaderboard();

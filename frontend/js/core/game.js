@@ -62,7 +62,17 @@ const Game = {
             UI.updateLevelInfo(levelConfig);
         }
         
-        // 清除旧场景
+        // 清除旧场景（但保留其他玩家的humanoid对象）
+        const otherPlayersHumanoids = [];
+        if (typeof Multiplayer !== 'undefined' && Multiplayer.otherPlayers) {
+            Object.values(Multiplayer.otherPlayers).forEach(otherPlayer => {
+                if (otherPlayer.humanoid && this.scene.children.includes(otherPlayer.humanoid)) {
+                    otherPlayersHumanoids.push(otherPlayer.humanoid);
+                    this.scene.remove(otherPlayer.humanoid);
+                }
+            });
+        }
+        
         while(this.scene.children.length > 0) {
             this.scene.remove(this.scene.children[0]);
         }
@@ -127,6 +137,50 @@ const Game = {
         // 更新摄像机
         this.camera.position.set(CONFIG.cameraOffset.x, CONFIG.cameraOffset.y, CONFIG.cameraOffset.z);
         this.camera.lookAt(0, 0, 0);
+        
+        // 重新检查并显示所有在同一关卡的其他玩家
+        if (typeof Multiplayer !== 'undefined' && Multiplayer.otherPlayers) {
+            Object.entries(Multiplayer.otherPlayers).forEach(([playerId, otherPlayer]) => {
+                if (otherPlayer.level === levelIndex && otherPlayer.humanoid) {
+                    // 确保humanoid在场景中
+                    if (!this.scene.children.includes(otherPlayer.humanoid)) {
+                        this.scene.add(otherPlayer.humanoid);
+                    }
+                    // 更新位置并显示
+                    const levelConfig = LIFE_LEVELS[levelIndex];
+                    const mazeSize = levelConfig.mazeSize;
+                    const offsetX = -(mazeSize - 1) * CONFIG.cellSize / 2;
+                    const offsetZ = -(mazeSize - 1) * CONFIG.cellSize / 2;
+                    
+                    const targetX = otherPlayer.pos.x * CONFIG.cellSize + offsetX;
+                    const targetZ = otherPlayer.pos.z * CONFIG.cellSize + offsetZ;
+                    
+                    otherPlayer.humanoid.position.set(targetX, 0, targetZ);
+                    otherPlayer.humanoid.visible = true;
+                    
+                    otherPlayer.humanoid.traverse((child) => {
+                        if (child.material) {
+                            child.material.transparent = false;
+                            child.material.opacity = 1.0;
+                        }
+                    });
+                }
+            });
+        }
+        
+        // 立即发送位置更新，通知其他玩家当前玩家已进入新关卡
+        if (typeof Multiplayer !== 'undefined' && Multiplayer.isOnlineMode && 
+            typeof Player !== 'undefined' && Multiplayer.sendPositionUpdate) {
+            // 强制发送一次位置更新（忽略时间限制）
+            const playerPos = Player.playerPos || { x: 0, z: 0 };
+            Multiplayer.sendMessage({
+                type: 'playerUpdate',
+                roomId: Multiplayer.roomId,
+                playerId: Multiplayer.playerId,
+                position: playerPos,
+                level: levelIndex
+            });
+        }
     },
 
     // 创建目标点
