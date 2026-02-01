@@ -22,8 +22,17 @@ const Multiplayer = {
 
     // 初始化
     init() {
-        // 先检测服务器地址，确保 serverBaseUrl 正确设置
+        // 强制先检测服务器地址，确保 serverBaseUrl 正确设置
         this.detectServerAddress();
+        
+        // 再次确认 serverBaseUrl 正确（防止被其他地方修改）
+        const hostname = window.location.hostname;
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+        if (!isLocal && !this.serverBaseUrl.includes('onrender.com')) {
+            console.error('检测到 serverBaseUrl 设置错误，强制修复:', this.serverBaseUrl);
+            this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+        }
+        
         // 然后显示通知
         this.showRenderNotification();
         // 更新头像图片（使用前端托管的图片，不依赖服务器）
@@ -151,6 +160,9 @@ const Multiplayer = {
         const roomListEl = document.getElementById('room-list');
         if (!roomListEl) return;
         
+        // 在每次刷新前，强制重新检测服务器地址
+        this.detectServerAddress();
+        
         roomListEl.innerHTML = '<p>正在加载房间列表...</p>';
         
         // 强制检查并修复 serverBaseUrl
@@ -161,13 +173,13 @@ const Multiplayer = {
         if (!isLocal) {
             // 生产环境：必须是 Render 服务器
             if (!this.serverBaseUrl.includes('onrender.com')) {
-                console.warn('检测到错误的 serverBaseUrl:', this.serverBaseUrl, '，强制设置为 Render 服务器');
+                console.error('检测到错误的 serverBaseUrl:', this.serverBaseUrl, '，强制设置为 Render 服务器');
                 this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
             }
         } else {
             // 本地环境：必须是 localhost
             if (!this.serverBaseUrl.includes('localhost')) {
-                console.warn('检测到错误的 serverBaseUrl:', this.serverBaseUrl, '，强制设置为 localhost');
+                console.error('检测到错误的 serverBaseUrl:', this.serverBaseUrl, '，强制设置为 localhost');
                 this.serverBaseUrl = 'http://localhost:8081';
             }
         }
