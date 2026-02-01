@@ -153,6 +153,25 @@ const Multiplayer = {
         
         roomListEl.innerHTML = '<p>正在加载房间列表...</p>';
         
+        // 强制检查并修复 serverBaseUrl
+        const hostname = window.location.hostname;
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+        
+        // 如果 serverBaseUrl 不正确，强制重新设置
+        if (!isLocal) {
+            // 生产环境：必须是 Render 服务器
+            if (!this.serverBaseUrl.includes('onrender.com')) {
+                console.warn('检测到错误的 serverBaseUrl:', this.serverBaseUrl, '，强制设置为 Render 服务器');
+                this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+            }
+        } else {
+            // 本地环境：必须是 localhost
+            if (!this.serverBaseUrl.includes('localhost')) {
+                console.warn('检测到错误的 serverBaseUrl:', this.serverBaseUrl, '，强制设置为 localhost');
+                this.serverBaseUrl = 'http://localhost:8081';
+            }
+        }
+        
         // 检查是否为生产环境
         const isRenderServer = this.serverBaseUrl.includes('onrender.com');
         
@@ -160,7 +179,7 @@ const Multiplayer = {
         let apiUrl = this.serverBaseUrl;
         
         // 如果 serverBaseUrl 还是默认值（http://localhost:8081），重新检测
-        if (apiUrl === 'http://localhost:8081' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        if (apiUrl === 'http://localhost:8081' && !isLocal) {
             console.warn('serverBaseUrl 还是默认值，重新检测...');
             this.detectServerAddress();
             apiUrl = this.serverBaseUrl;
@@ -171,7 +190,7 @@ const Multiplayer = {
             apiUrl = apiUrl.replace('http://', 'https://');
         }
         
-        console.log('刷新房间列表，使用API地址:', apiUrl + '/rooms');
+        console.log('刷新房间列表，使用API地址:', apiUrl + '/rooms', '当前 serverBaseUrl:', this.serverBaseUrl);
         
         fetch(apiUrl + '/rooms')
             .then(response => {
