@@ -21,9 +21,7 @@ const LIFE_LEVELS = [
 
 // 支持云服务环境变量端口
 const PORT = process.env.PORT || 8080;
-const HTTP_PORT = process.env.HTTP_PORT || 8081;
 
-const wss = new WebSocket.Server({ port: PORT });
 const fs = require('fs');
 const path = require('path');
 
@@ -31,6 +29,7 @@ const rooms = {}; // {roomId: {players: [{playerId, name, color, level, time}], 
 const http = require('http');
 
 // HTTP服务器用于获取房间列表和提供静态文件（头像图片）
+// 同时处理 WebSocket 升级请求
 const httpServer = http.createServer((req, res) => {
     // 设置CORS头
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -82,8 +81,17 @@ const httpServer = http.createServer((req, res) => {
     }
 });
 
-httpServer.listen(HTTP_PORT, () => {
-    console.log(`HTTP服务器运行在 http://localhost:${HTTP_PORT} (用于房间列表查询)`);
+// WebSocket 服务器附加到 HTTP 服务器上，使用同一个端口
+const wss = new WebSocket.Server({ server: httpServer });
+
+// 启动 HTTP 服务器（同时处理 WebSocket 升级）
+httpServer.listen(PORT, () => {
+    console.log(`HTTP服务器运行在 http://localhost:${PORT} (用于房间列表查询)`);
+    console.log(`WebSocket服务器运行在 ws://0.0.0.0:${PORT}`);
+    console.log('监听所有网络接口，可以通过以下地址连接:');
+    console.log(`  - ws://localhost:${PORT} (本机)`);
+    console.log(`  - ws://127.0.0.1:${PORT} (本机)`);
+    console.log('等待玩家连接...');
 });
 
 wss.on('connection', (ws, req) => {
@@ -333,8 +341,4 @@ function broadcastToRoom(roomId, message, excludePlayerId = null) {
     }
 }
 
-console.log(`WebSocket服务器运行在 ws://0.0.0.0:${PORT}`);
-console.log('监听所有网络接口，可以通过以下地址连接:');
-console.log(`  - ws://localhost:${PORT} (本机)`);
-console.log(`  - ws://127.0.0.1:${PORT} (本机)`);
-console.log('等待玩家连接...');
+// 日志已在 httpServer.listen 中输出
