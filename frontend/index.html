@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIFE - 人生迷宫</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="lobby">
+        <h1>LIFE - 多人竞速</h1>
+        
+        <!-- 房间列表视图 -->
+        <div id="room-list-view">
+            <h2>在线房间</h2>
+            
+            <!-- 服务器配置区域 -->
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(79, 195, 247, 0.1); border-radius: 10px; border: 1px solid #4fc3f7;">
+                <h3 style="font-size: 16px; color: #4fc3f7; margin-bottom: 10px;">服务器配置</h3>
+                <input type="text" id="serverConfigInput" placeholder="服务器地址 (例如: ws://localhost:8080 或 ws://10.6.40.164:8080)" style="width: 400px; padding: 8px; font-size: 14px; border: 2px solid #4fc3f7; background: rgba(0, 0, 0, 0.5); color: #fff; border-radius: 5px; margin-right: 10px;">
+                <button onclick="Multiplayer.saveServerConfig()" style="padding: 8px 15px; font-size: 14px; background: #4fc3f7; color: #000; border: none; border-radius: 5px; cursor: pointer;">保存</button>
+                <div style="font-size: 11px; color: #999; margin-top: 5px;">
+                    💡 运行服务器的人用: <code>ws://localhost:8080</code> | 其他人用: <code>ws://10.6.40.164:8080</code>
+                </div>
+            </div>
+            
+            <button onclick="Multiplayer.refreshRoomList()" style="padding: 10px 20px; font-size: 14px; background: #4fc3f7; color: #000; border: none; border-radius: 5px; cursor: pointer; margin-bottom: 20px;">刷新列表</button>
+            <div id="room-list">
+                <p>正在加载房间列表...</p>
+            </div>
+            <button onclick="Multiplayer.createNewRoom()" style="padding: 10px 20px; font-size: 14px; background: #81c784; color: #000; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px;">创建新房间</button>
+            <button onclick="Game.startOfflineMode()" style="padding: 10px 20px; font-size: 14px; background: #666; color: #fff; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px;">离线模式</button>
+        </div>
+        
+        <!-- 房间详情视图（进入房间后显示） -->
+        <div id="room-section" style="display: none;">
+            <h2 id="current-room-name">房间</h2>
+            <input type="text" id="serverInput" placeholder="服务器地址" style="width: 350px; margin-bottom: 10px; display: none;" value="">
+            <div id="connection-status" style="margin: 5px 0; font-size: 12px; color: #ffb74d;"></div>
+            <br>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; color: #fff; font-size: 18px;">选择角色：</label>
+                <div id="character-selection" style="display: none; flex-wrap: wrap; justify-content: center;">
+                    <div class="character-option" data-character="1" onclick="Multiplayer.selectCharacter(1)">
+                        <img id="avatar-1" src="" class="character-avatar" alt="王哥">
+                        <div class="character-name">王哥</div>
+                    </div>
+                    <div class="character-option" data-character="2" onclick="Multiplayer.selectCharacter(2)">
+                        <img id="avatar-2" src="" class="character-avatar" alt="涛子">
+                        <div class="character-name">涛子</div>
+                    </div>
+                    <div class="character-option" data-character="3" onclick="Multiplayer.selectCharacter(3)">
+                        <img id="avatar-3" src="" class="character-avatar" alt="高天">
+                        <div class="character-name">高天</div>
+                    </div>
+                    <div class="character-option" data-character="4" onclick="Multiplayer.selectCharacter(4)">
+                        <img id="avatar-4" src="" class="character-avatar" alt="胡姐">
+                        <div class="character-name">胡姐</div>
+                    </div>
+                    <div class="character-option" data-character="5" onclick="Multiplayer.selectCharacter(5)">
+                        <img id="avatar-5" src="" class="character-avatar" alt="苟哥">
+                        <div class="character-name">苟哥</div>
+                    </div>
+                </div>
+            </div>
+            <button onclick="Multiplayer.joinRoom()" id="join-btn" style="padding: 12px 30px; font-size: 16px; background: #4fc3f7; color: #000; border: none; border-radius: 5px; cursor: pointer;">加入房间</button>
+            <button onclick="Multiplayer.backToRoomList()" style="padding: 12px 30px; font-size: 16px; background: #666; color: #fff; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">返回</button>
+        </div>
+        
+        <div id="players-list">
+            <p>等待其他玩家加入...</p>
+        </div>
+        <div id="game-status"></div>
+    </div>
+    <div id="ui">
+        <div id="level">LIFE</div>
+        <div id="age">Age: <span id="ageDisplay">0-6岁</span></div>
+        <div id="stage">Stage: <span id="stageDisplay">蒙昧初始期</span></div>
+        <div id="quote">Thought: <span id="quoteDisplay">世界是一个巨大的游乐场。</span></div>
+        <div id="health" style="font-size: 18px; margin-top: 10px; color: #e57373;">❤️ 血量: <span id="healthDisplay">100</span>/100</div>
+        <div id="jumps" style="font-size: 16px; margin-top: 5px; color: #ffb74d;">跳跃: <span id="jumpsDisplay">0</span>/10</div>
+        <button id="antiShakeBtn" onclick="Game.toggleAntiShake()" style="position: fixed; top: 10px; right: 10px; padding: 10px 20px; font-size: 14px; background: rgba(0, 0, 0, 0.7); color: #fff; border: 2px solid #4fc3f7; border-radius: 5px; cursor: pointer; z-index: 1000;">防抖: 关闭</button>
+        <div id="controls">WASD / Arrow Keys to Move | Direction + SPACE to Jump</div>
+    </div>
+    <div id="leaderboard">
+        <h3>排行榜</h3>
+        <div id="leaderboard-content"></div>
+    </div>
+    <div id="victory">LEVEL COMPLETE!</div>
+    <div id="transition"></div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- 模块化 JavaScript 文件 -->
+    <!-- 配置模块 -->
+    <script src="js/config/config.js"></script>
+    <!-- 核心模块 -->
+    <script src="js/core/maze.js"></script>
+    <script src="js/core/game.js"></script>
+    <!-- 实体模块 -->
+    <script src="js/entities/player.js"></script>
+    <script src="js/entities/npc.js"></script>
+    <!-- 多人游戏模块 -->
+    <script src="js/multiplayer/multiplayer.js"></script>
+    <!-- UI 模块 -->
+    <script src="js/ui/ui.js"></script>
+    
+    <!-- 初始化 -->
+    <script>
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            UI.init();
+            Multiplayer.init();
+        });
+    </script>
+</body>
+</html>
