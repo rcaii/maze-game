@@ -20,7 +20,7 @@ const Multiplayer = {
     serverBaseUrl: 'https://localhost:8081', // 默认值，会在init()中根据环境自动设置
     selectedCharacter: 1,
     defaultServerAddress: 'wss://maze-game-server-ut3f.onrender.com', // 生产环境服务器地址（WSS，无端口）
-    VERSION: 'v2.3-20260201', // 版本标识，用于确认代码是否更新 - 修复混合内容问题
+    VERSION: 'v2.4-20260201', // 版本标识 - 强制使用 Render 服务器
 
     // ==================== 辅助方法 ====================
     
@@ -37,9 +37,24 @@ const Multiplayer = {
     },
     
     // 判断是否为本地环境
+    // 强制返回 false，让所有环境都使用 Render 服务器
     isLocalEnvironment() {
+        // 始终返回 false，强制使用 Render 服务器（无论是本地还是生产环境）
+        return false;
+        
+        // 如需恢复本地开发模式，取消下面代码的注释，并注释掉上面的 return false
+        /*
         const hostname = window.location.hostname;
+        // 明确排除云平台域名（tcloudbaseapp.com, onrender.com 等）
+        if (hostname.includes('tcloudbaseapp.com') || 
+            hostname.includes('onrender.com') || 
+            hostname.includes('vercel.app') ||
+            hostname.includes('netlify.app') ||
+            hostname.includes('github.io')) {
+            return false;
+        }
         return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+        */
     },
 
     // 获取服务器配置（统一方法）- 生产环境强制使用 Render 服务器
@@ -59,29 +74,55 @@ const Multiplayer = {
         };
     },
 
-    // 获取 API URL（强制生产环境使用 Render）
+    // 清理 URL，移除端口号（生产环境）
+    cleanUrl(url) {
+        if (!url) return url;
+        // 生产环境：移除所有端口号
+        if (!this.isLocalEnvironment()) {
+            // 匹配协议://域名:端口/路径 或 协议://域名:端口
+            // 移除 :端口号（包括 :443, :80, :8081 等所有端口）
+            url = url.replace(/(https?:\/\/[^\/:]+):\d+(\/|$)/g, '$1$2');
+            // 处理 WebSocket URL (ws:// 或 wss://)
+            url = url.replace(/(wss?:\/\/[^\/:]+):\d+(\/|$)/g, '$1$2');
+        }
+        return url;
+    },
+
+    // 获取 API URL（强制生产环境使用 Render，确保 HTTPS，无端口号）
     getApiUrl() {
         if (this.isLocalEnvironment()) {
             return this.LOCAL_SERVER.baseUrl;
         }
         // 生产环境：直接返回硬编码的 Render 服务器地址，不使用 this.serverBaseUrl
-        return this.RENDER_SERVER.baseUrl;
+        // 强制确保使用 HTTPS，并移除端口号
+        let url = this.RENDER_SERVER.baseUrl;
+        // 如果 URL 不是以 https:// 开头，强制修复
+        if (!url.startsWith('https://')) {
+            url = url.replace(/^http:\/\//, 'https://');
+        }
+        // 移除端口号
+        url = this.cleanUrl(url);
+        return url;
     },
 
-    // 获取 WebSocket URL（强制生产环境使用 Render）
+    // 获取 WebSocket URL（强制生产环境使用 Render，无端口号）
     getWebSocketUrl() {
         if (this.isLocalEnvironment()) {
             return this.LOCAL_SERVER.wsUrl;
         }
-        // 生产环境：直接返回硬编码的 Render 服务器地址
-        return this.RENDER_SERVER.wsUrl;
+        // 生产环境：直接返回硬编码的 Render 服务器地址，并移除端口号
+        let url = this.RENDER_SERVER.wsUrl;
+        url = this.cleanUrl(url);
+        return url;
     },
 
     // 验证和修复WebSocket地址
     validateAndFixWebSocketAddress(address) {
-        // 生产环境：始终返回 Render 服务器地址
+        // 生产环境：始终返回 Render 服务器地址，并移除端口号
         if (!this.isLocalEnvironment()) {
-            return this.RENDER_SERVER.wsUrl;
+            let url = this.RENDER_SERVER.wsUrl;
+            url = this.cleanUrl(url);
+            return url;
         }
         
         // 本地环境处理
@@ -108,12 +149,27 @@ const Multiplayer = {
     // 确保serverBaseUrl正确设置
     ensureServerBaseUrl() {
         if (!this.isLocalEnvironment()) {
-            // 生产环境：强制使用 Render 服务器
-            if (this.serverBaseUrl !== this.RENDER_SERVER.baseUrl) {
-                console.warn('%c⚠️ 修正 serverBaseUrl:', 'color: #ffb74d; font-weight: bold;', 
-                    this.serverBaseUrl, '→', this.RENDER_SERVER.baseUrl);
-                this.serverBaseUrl = this.RENDER_SERVER.baseUrl;
+            // 生产环境：强制使用 Render 服务器，并确保使用 HTTPS，无端口号
+            let correctUrl = this.RENDER_SERVER.baseUrl;
+            // 强制确保使用 HTTPS
+            if (!correctUrl.startsWith('https://')) {
+                correctUrl = correctUrl.replace(/^http:\/\//, 'https://');
             }
+            // 移除端口号
+            correctUrl = this.cleanUrl(correctUrl);
+            if (this.serverBaseUrl !== correctUrl) {
+                console.warn('%c⚠️ 修正 serverBaseUrl:', 'color: #ffb74d; font-weight: bold;', 
+                    this.serverBaseUrl, '→', correctUrl);
+                this.serverBaseUrl = correctUrl;
+            }
+            // 额外检查：如果 serverBaseUrl 是 HTTP，强制改为 HTTPS
+            if (this.serverBaseUrl.startsWith('http://') && !this.serverBaseUrl.startsWith('https://')) {
+                console.warn('%c⚠️ 强制修复 HTTP 为 HTTPS:', 'color: #ffb74d; font-weight: bold;', 
+                    this.serverBaseUrl, '→', this.serverBaseUrl.replace(/^http:\/\//, 'https://'));
+                this.serverBaseUrl = this.serverBaseUrl.replace(/^http:\/\//, 'https://');
+            }
+            // 确保移除端口号
+            this.serverBaseUrl = this.cleanUrl(this.serverBaseUrl);
         } else {
             // 本地环境：确保使用 localhost
             if (!this.serverBaseUrl.includes('localhost')) {
@@ -261,9 +317,19 @@ const Multiplayer = {
         roomListEl.innerHTML = '<p>正在加载房间列表...</p>';
         
         // 使用 getApiUrl() 确保生产环境使用正确的服务器地址
-        const apiUrl = this.getApiUrl();
+        let apiUrl = this.getApiUrl();
         
-        console.log('刷新房间列表，使用API地址:', apiUrl + '/rooms', '当前环境:', this.isLocalEnvironment() ? '本地' : '生产');
+        // 强制确保生产环境使用 HTTPS（防止混合内容错误）
+        if (!this.isLocalEnvironment()) {
+            // 如果当前页面是 HTTPS，强制 API URL 也使用 HTTPS
+            if (window.location.protocol === 'https:') {
+                apiUrl = apiUrl.replace(/^http:\/\//, 'https://');
+            }
+            // 确保移除端口号（生产环境不应该有端口号）
+            apiUrl = this.cleanUrl(apiUrl);
+        }
+        
+        console.log('刷新房间列表，使用API地址:', apiUrl + '/rooms', '当前环境:', this.isLocalEnvironment() ? '本地' : '生产', '页面协议:', window.location.protocol);
         
         fetch(apiUrl + '/rooms')
             .then(response => {
