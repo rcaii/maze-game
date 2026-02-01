@@ -35,6 +35,7 @@ const Multiplayer = {
     // 自动检测服务器地址
     detectServerAddress() {
         const hostname = window.location.hostname;
+        const protocol = window.location.protocol;
         const serverInput = document.getElementById('serverInput');
         const configInput = document.getElementById('serverConfigInput');
         const statusInfo = document.getElementById('server-status-info');
@@ -52,9 +53,9 @@ const Multiplayer = {
             if (statusInfo) statusInfo.style.display = 'none';
         } else {
             // 生产环境 - 自动使用Render服务器
-            // 注意：Render的HTTP API也使用HTTPS
+            // 强制使用Render服务器地址，不使用当前页面的hostname
             this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
-            const wsAddress = this.defaultServerAddress;
+            const wsAddress = this.defaultServerAddress; // wss://maze-game-server-ut3f.onrender.com
             if (serverInput) serverInput.value = wsAddress;
             if (configInput) configInput.value = wsAddress;
             
@@ -65,7 +66,17 @@ const Multiplayer = {
             }
         }
         
-        this.updateAvatarImages();
+        // 确保 serverBaseUrl 始终使用 HTTPS（如果页面是 HTTPS）
+        if (protocol === 'https:' && this.serverBaseUrl.startsWith('http://')) {
+            this.serverBaseUrl = this.serverBaseUrl.replace('http://', 'https://');
+        }
+        
+        console.log('服务器地址已设置:', {
+            hostname: hostname,
+            isLocal: isLocal,
+            serverBaseUrl: this.serverBaseUrl,
+            wsAddress: serverInput ? serverInput.value : 'N/A'
+        });
     },
 
     // 显示Render免费版提示
