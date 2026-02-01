@@ -15,15 +15,15 @@
         <div id="room-list-view">
             <h2>在线房间</h2>
             
-            <!-- 服务器配置区域 -->
-            <div style="margin-bottom: 20px; padding: 15px; background: rgba(79, 195, 247, 0.1); border-radius: 10px; border: 1px solid #4fc3f7;">
-                <h3 style="font-size: 16px; color: #4fc3f7; margin-bottom: 10px;">服务器配置</h3>
-                <input type="text" id="serverConfigInput" placeholder="服务器地址 (例如: ws://localhost:8080 或 ws://10.6.40.164:8080)" style="width: 400px; padding: 8px; font-size: 14px; border: 2px solid #4fc3f7; background: rgba(0, 0, 0, 0.5); color: #fff; border-radius: 5px; margin-right: 10px;">
-                <button onclick="Multiplayer.saveServerConfig()" style="padding: 8px 15px; font-size: 14px; background: #4fc3f7; color: #000; border: none; border-radius: 5px; cursor: pointer;">保存</button>
-                <div style="font-size: 11px; color: #999; margin-top: 5px;">
-                    💡 运行服务器的人用: <code>ws://localhost:8080</code> | 其他人用: <code>ws://10.6.40.164:8080</code>
+            <!-- 服务器状态提示（自动配置，无需手动输入） -->
+            <div id="server-status-info" style="margin-bottom: 20px; padding: 15px; background: rgba(79, 195, 247, 0.1); border-radius: 10px; border: 1px solid #4fc3f7; display: none;">
+                <h3 style="font-size: 16px; color: #4fc3f7; margin-bottom: 10px;">服务器状态</h3>
+                <div style="font-size: 13px; color: #fff;">
+                    <span id="server-status-text">正在检测服务器...</span>
                 </div>
             </div>
+            <!-- 隐藏的服务器配置输入（用于内部使用） -->
+            <input type="text" id="serverConfigInput" style="display: none;" value="">
             
             <button onclick="Multiplayer.refreshRoomList()" style="padding: 10px 20px; font-size: 14px; background: #4fc3f7; color: #000; border: none; border-radius: 5px; cursor: pointer; margin-bottom: 20px;">刷新列表</button>
             <div id="room-list">

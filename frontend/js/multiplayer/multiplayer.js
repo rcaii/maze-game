@@ -18,10 +18,12 @@ const Multiplayer = {
     selectedRoomId: null,
     serverBaseUrl: 'http://localhost:8081',
     selectedCharacter: 1,
+    defaultServerAddress: 'wss://maze-game-server-ut3f.onrender.com', // 生产环境服务器地址
 
     // 初始化
     init() {
         this.detectServerAddress();
+        this.showRenderNotification();
         this.refreshRoomList();
         this.updateAvatarImages();
     },
@@ -30,18 +32,89 @@ const Multiplayer = {
     detectServerAddress() {
         const hostname = window.location.hostname;
         const serverInput = document.getElementById('serverInput');
+        const configInput = document.getElementById('serverConfigInput');
+        const statusInfo = document.getElementById('server-status-info');
+        const statusText = document.getElementById('server-status-text');
         
-        if (!serverInput) return;
+        // 判断是否为本地开发环境
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
         
-        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
+        if (isLocal) {
+            // 本地开发环境
             this.serverBaseUrl = 'http://localhost:8081';
-            if (serverInput) serverInput.value = 'ws://localhost:8080';
+            const wsAddress = 'ws://localhost:8080';
+            if (serverInput) serverInput.value = wsAddress;
+            if (configInput) configInput.value = wsAddress;
+            if (statusInfo) statusInfo.style.display = 'none';
         } else {
-            this.serverBaseUrl = `http://${hostname}:8081`;
-            if (serverInput) serverInput.value = `ws://${hostname}:8080`;
+            // 生产环境 - 自动使用Render服务器
+            this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+            const wsAddress = this.defaultServerAddress;
+            if (serverInput) serverInput.value = wsAddress;
+            if (configInput) configInput.value = wsAddress;
+            
+            // 显示服务器状态信息
+            if (statusInfo) statusInfo.style.display = 'block';
+            if (statusText) {
+                statusText.innerHTML = '✅ 已自动连接到服务器: <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">' + wsAddress + '</code>';
+            }
         }
         
         this.updateAvatarImages();
+    },
+
+    // 显示Render免费版提示
+    showRenderNotification() {
+        const hostname = window.location.hostname;
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+        
+        // 只在生产环境显示提示
+        if (!isLocal) {
+            const notification = document.createElement('div');
+            notification.id = 'render-notification';
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: rgba(255, 183, 77, 0.95);
+                color: #000;
+                padding: 15px 20px;
+                border-radius: 10px;
+                border: 2px solid #ffb74d;
+                max-width: 350px;
+                z-index: 10000;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                font-size: 14px;
+                line-height: 1.5;
+            `;
+            notification.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 8px; display: flex; align-items: center;">
+                    <span style="font-size: 18px; margin-right: 8px;">⏰</span>
+                    <span>服务器提示</span>
+                    <button onclick="document.getElementById('render-notification').style.display='none'" 
+                            style="margin-left: auto; background: transparent; border: none; font-size: 20px; cursor: pointer; color: #000; padding: 0 5px;">×</button>
+                </div>
+                <div>
+                    使用免费版服务器，15分钟无活动会休眠。<br>
+                    <strong>首次连接或休眠后需要等待约30秒唤醒服务器</strong>，请耐心等待。
+                </div>
+            `;
+            document.body.appendChild(notification);
+            
+            // 5秒后自动隐藏（可选）
+            setTimeout(() => {
+                const notif = document.getElementById('render-notification');
+                if (notif) {
+                    notif.style.opacity = '0';
+                    notif.style.transition = 'opacity 0.5s';
+                    setTimeout(() => {
+                        if (notif.parentNode) {
+                            notif.parentNode.removeChild(notif);
+                        }
+                    }, 500);
+                }
+            }, 10000); // 10秒后自动隐藏
+        }
     },
 
     // 更新头像图片
@@ -69,14 +142,26 @@ const Multiplayer = {
         
         roomListEl.innerHTML = '<p>正在加载房间列表...</p>';
         
+        // 检查是否为生产环境
+        const isRenderServer = this.serverBaseUrl.includes('onrender.com');
+        
         fetch(this.serverBaseUrl + '/rooms')
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('服务器响应错误');
+                }
+                return response.json();
+            })
             .then(data => {
                 this.displayRoomList(data.rooms || []);
             })
             .catch(error => {
                 console.error('获取房间列表失败:', error);
-                roomListEl.innerHTML = '<p style="color: #e57373;">无法连接到服务器<br>请确保服务器正在运行</p>';
+                if (isRenderServer) {
+                    roomListEl.innerHTML = '<p style="color: #ffb74d;">⚠️ 服务器可能正在唤醒中...<br><small>免费版服务器15分钟无活动会休眠，首次访问需要约30秒唤醒</small><br><button onclick="Multiplayer.refreshRoomList()" style="margin-top: 10px; padding: 8px 15px; background: #4fc3f7; color: #000; border: none; border-radius: 5px; cursor: pointer;">重试</button></p>';
+                } else {
+                    roomListEl.innerHTML = '<p style="color: #e57373;">无法连接到服务器<br>请确保服务器正在运行</p>';
+                }
             });
     },
 
@@ -242,27 +327,39 @@ const Multiplayer = {
         
         this.roomId = roomId;
         
+        // 检查是否为生产环境（Render服务器）
+        const isRenderServer = serverAddress && serverAddress.includes('onrender.com');
+        
         if (statusEl) {
-            statusEl.innerHTML = '<span style="color: #ffb74d;">🔄 正在连接服务器...</span>';
+            if (isRenderServer) {
+                statusEl.innerHTML = '<span style="color: #ffb74d;">🔄 正在连接服务器...<br><small style="opacity: 0.8;">（免费版服务器可能需要30秒唤醒，请耐心等待）</small></span>';
+            } else {
+                statusEl.innerHTML = '<span style="color: #ffb74d;">🔄 正在连接服务器...</span>';
+            }
         }
         if (joinBtn) {
             joinBtn.disabled = true;
             joinBtn.textContent = '连接中...';
         }
         
-        // 设置连接超时（5秒）
+        // Render服务器需要更长的超时时间（35秒）
+        const timeoutDuration = isRenderServer ? 35000 : 5000;
         const connectionTimeout = setTimeout(() => {
             if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
                 this.ws.close();
                 if (statusEl) {
-                    statusEl.innerHTML = '<span style="color: #e57373;">❌ 连接超时！请检查服务器是否运行</span>';
+                    if (isRenderServer) {
+                        statusEl.innerHTML = '<span style="color: #e57373;">❌ 连接超时！<br><small>服务器可能正在唤醒中，请稍后重试</small></span>';
+                    } else {
+                        statusEl.innerHTML = '<span style="color: #e57373;">❌ 连接超时！请检查服务器是否运行</span>';
+                    }
                 }
                 if (joinBtn) {
                     joinBtn.disabled = false;
-                    joinBtn.textContent = '加入房间';
+                    joinBtn.textContent = '重试连接';
                 }
             }
-        }, 5000);
+        }, timeoutDuration);
         
         try {
             this.ws = new WebSocket(serverAddress);
