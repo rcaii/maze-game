@@ -48,6 +48,7 @@ const Multiplayer = {
             if (statusInfo) statusInfo.style.display = 'none';
         } else {
             // 生产环境 - 自动使用Render服务器
+            // 注意：Render的HTTP API也使用HTTPS
             this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
             const wsAddress = this.defaultServerAddress;
             if (serverInput) serverInput.value = wsAddress;
@@ -126,8 +127,15 @@ const Multiplayer = {
             const img = document.getElementById(`avatar-${i}`);
             if (img) {
                 if (useServerPath && this.serverBaseUrl) {
-                    const serverHost = this.serverBaseUrl.replace('http://', '').replace(':8081', '');
-                    img.src = `http://${serverHost}:8081/assets/images/${i}.jpg`;
+                    // Render服务器：直接使用baseUrl（已经是HTTPS）
+                    if (this.serverBaseUrl.includes('onrender.com')) {
+                        img.src = `${this.serverBaseUrl}/assets/images/${i}.jpg`;
+                    } else {
+                        // 本地服务器：根据页面协议选择
+                        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+                        const serverHost = this.serverBaseUrl.replace('http://', '').replace('https://', '').replace(':8081', '');
+                        img.src = `${protocol}//${serverHost}:8081/assets/images/${i}.jpg`;
+                    }
                 } else {
                     img.src = `assets/images/${i}.jpg`;
                 }
@@ -145,7 +153,13 @@ const Multiplayer = {
         // 检查是否为生产环境
         const isRenderServer = this.serverBaseUrl.includes('onrender.com');
         
-        fetch(this.serverBaseUrl + '/rooms')
+        // 确保使用HTTPS（如果页面是HTTPS）
+        let apiUrl = this.serverBaseUrl;
+        if (window.location.protocol === 'https:' && apiUrl.startsWith('http://')) {
+            apiUrl = apiUrl.replace('http://', 'https://');
+        }
+        
+        fetch(apiUrl + '/rooms')
             .then(response => {
                 if (!response.ok) {
                     throw new Error('服务器响应错误');
