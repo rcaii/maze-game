@@ -158,9 +158,20 @@ const Multiplayer = {
         
         // 确保使用HTTPS（如果页面是HTTPS）
         let apiUrl = this.serverBaseUrl;
+        
+        // 如果 serverBaseUrl 还是默认值（http://localhost:8081），重新检测
+        if (apiUrl === 'http://localhost:8081' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            console.warn('serverBaseUrl 还是默认值，重新检测...');
+            this.detectServerAddress();
+            apiUrl = this.serverBaseUrl;
+        }
+        
+        // 确保使用HTTPS（如果页面是HTTPS）
         if (window.location.protocol === 'https:' && apiUrl.startsWith('http://')) {
             apiUrl = apiUrl.replace('http://', 'https://');
         }
+        
+        console.log('刷新房间列表，使用API地址:', apiUrl + '/rooms');
         
         fetch(apiUrl + '/rooms')
             .then(response => {
@@ -329,13 +340,16 @@ const Multiplayer = {
         this.enterRoom(newRoomId);
     },
 
-    // 保存服务器配置
+    // 保存服务器配置（已废弃，现在自动配置）
     saveServerConfig() {
+        // 这个函数现在主要用于兼容性，实际配置已自动完成
         const configInput = document.getElementById('serverConfigInput');
         const serverAddress = configInput ? configInput.value.trim() : '';
         
         if (!serverAddress) {
-            alert('请输入服务器地址！');
+            // 如果没有输入，使用自动检测的地址
+            this.detectServerAddress();
+            alert('已使用自动检测的服务器地址！');
             return;
         }
         
@@ -347,12 +361,19 @@ const Multiplayer = {
         const serverInput = document.getElementById('serverInput');
         if (serverInput) serverInput.value = serverAddress;
         
-        // 更新 serverBaseUrl
-        const wsMatch = serverAddress.match(/ws:\/\/([^:]+):(\d+)/);
+        // 更新 serverBaseUrl - 支持 ws:// 和 wss://
+        const wsMatch = serverAddress.match(/(?:ws|wss):\/\/([^:]+)(?::(\d+))?/);
         if (wsMatch) {
             const host = wsMatch[1];
-            const port = wsMatch[2];
-            this.serverBaseUrl = `http://${host}:${parseInt(port) + 1}`;
+            const port = wsMatch[2] || (serverAddress.startsWith('wss://') ? '443' : '80');
+            const protocol = serverAddress.startsWith('wss://') || window.location.protocol === 'https:' ? 'https' : 'http';
+            
+            // Render服务器特殊处理
+            if (host.includes('onrender.com')) {
+                this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+            } else {
+                this.serverBaseUrl = `${protocol}://${host}:${parseInt(port) + 1}`;
+            }
         }
         
         alert('服务器配置已保存！');
