@@ -172,7 +172,8 @@ const Multiplayer = {
         // 如果 serverBaseUrl 不正确，强制重新设置
         if (!isLocal) {
             // 生产环境：必须是 Render 服务器
-            if (!this.serverBaseUrl.includes('onrender.com')) {
+            // 检查是否包含当前页面的 hostname（这是错误的）
+            if (this.serverBaseUrl.includes(hostname) || !this.serverBaseUrl.includes('onrender.com')) {
                 console.error('检测到错误的 serverBaseUrl:', this.serverBaseUrl, '，强制设置为 Render 服务器');
                 this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
             }
