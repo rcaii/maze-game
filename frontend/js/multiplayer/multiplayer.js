@@ -1,5 +1,5 @@
 // ==================== 多人游戏模块 ====================
-// 版本标识：v2.1 - 2026-02-01 14:20 - 添加版本日志和强制检查
+// 版本标识：v2.2 - 2026-02-01 - 修复HTTPS混合内容和服务器连接问题
 
 const Multiplayer = {
     ws: null,
@@ -17,13 +17,19 @@ const Multiplayer = {
     lastPositionUpdate: 0,
     currentView: 'room-list',
     selectedRoomId: null,
-    serverBaseUrl: 'http://localhost:8081',
+    serverBaseUrl: 'http://localhost:8081', // 默认值，会在init()中根据环境自动设置
     selectedCharacter: 1,
-    defaultServerAddress: 'wss://maze-game-server-ut3f.onrender.com', // 生产环境服务器地址
-    VERSION: 'v2.1-20260201-1420', // 版本标识，用于确认代码是否更新
+    defaultServerAddress: 'wss://maze-game-server-ut3f.onrender.com', // 生产环境服务器地址（WSS，无端口）
+    VERSION: 'v2.2-20260201', // 版本标识，用于确认代码是否更新
 
     // 初始化
     init() {
+        // 更新页面上的版本号显示
+        const versionInfo = document.getElementById('version-info');
+        if (versionInfo) {
+            versionInfo.textContent = this.VERSION;
+        }
+        
         // 输出版本信息，确认代码已更新
         console.log('%c=== LIFE 多人游戏模块初始化 ===', 'color: #4fc3f7; font-size: 16px; font-weight: bold;');
         console.log('%c版本:', 'color: #81c784; font-weight: bold;', this.VERSION);
@@ -82,10 +88,11 @@ const Multiplayer = {
             if (configInput) configInput.value = wsAddress;
             if (statusInfo) statusInfo.style.display = 'none';
         } else {
-            // 生产环境 - 自动使用Render服务器
-            // 强制使用Render服务器地址，不使用当前页面的hostname
+            // 生产环境 - 强制使用Render服务器，绝不使用当前页面的hostname
+            // Render服务器地址（HTTPS，无端口号）
             this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
-            const wsAddress = this.defaultServerAddress; // wss://maze-game-server-ut3f.onrender.com
+            // WebSocket地址（WSS，无端口号）
+            const wsAddress = 'wss://maze-game-server-ut3f.onrender.com';
             if (serverInput) serverInput.value = wsAddress;
             if (configInput) configInput.value = wsAddress;
             
@@ -96,9 +103,16 @@ const Multiplayer = {
             }
         }
         
-        // 确保 serverBaseUrl 始终使用 HTTPS（如果页面是 HTTPS）
-        if (protocol === 'https:' && this.serverBaseUrl.startsWith('http://')) {
-            this.serverBaseUrl = this.serverBaseUrl.replace('http://', 'https://');
+        // 最终安全检查：确保生产环境绝不使用当前页面的hostname
+        if (!isLocal) {
+            if (this.serverBaseUrl.includes(hostname) || !this.serverBaseUrl.includes('onrender.com')) {
+                console.error('%c❌ 检测到错误的 serverBaseUrl，强制修复:', 'color: #e57373; font-size: 14px; font-weight: bold;', this.serverBaseUrl);
+                this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+                const wsAddress = 'wss://maze-game-server-ut3f.onrender.com';
+                if (serverInput) serverInput.value = wsAddress;
+                if (configInput) configInput.value = wsAddress;
+                console.log('%c✅ 已强制修复为 Render 服务器地址', 'color: #81c784; font-weight: bold;', this.serverBaseUrl);
+            }
         }
         
         console.log('%c服务器地址已设置:', 'color: #4fc3f7; font-weight: bold;', {
@@ -108,15 +122,6 @@ const Multiplayer = {
             wsAddress: serverInput ? serverInput.value : 'N/A',
             version: this.VERSION
         });
-        
-        // 额外检查：如果 serverBaseUrl 包含当前页面的 hostname（这是错误的）
-        if (!isLocal && this.serverBaseUrl.includes(hostname)) {
-            console.error('%c❌ 严重错误：serverBaseUrl 包含当前页面 hostname！', 'color: #e57373; font-size: 16px; font-weight: bold;');
-            console.error('错误的 serverBaseUrl:', this.serverBaseUrl);
-            console.error('当前页面 hostname:', hostname);
-            this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
-            console.log('%c✅ 已强制修复为 Render 服务器地址', 'color: #81c784; font-weight: bold;', this.serverBaseUrl);
-        }
     },
 
     // 显示Render免费版提示
@@ -202,10 +207,13 @@ const Multiplayer = {
         
         // 如果 serverBaseUrl 不正确，强制重新设置
         if (!isLocal) {
-            // 生产环境：必须是 Render 服务器
-            // 检查是否包含当前页面的 hostname（这是错误的）
+            // 生产环境：必须是 Render 服务器（HTTPS，无端口）
             if (this.serverBaseUrl.includes(hostname) || !this.serverBaseUrl.includes('onrender.com')) {
                 console.error('检测到错误的 serverBaseUrl:', this.serverBaseUrl, '，强制设置为 Render 服务器');
+                this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+            }
+            // 确保不包含端口号（Render的HTTPS不需要端口）
+            if (this.serverBaseUrl.includes(':') && !this.serverBaseUrl.includes('localhost')) {
                 this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
             }
         } else {
@@ -219,17 +227,15 @@ const Multiplayer = {
         // 检查是否为生产环境
         const isRenderServer = this.serverBaseUrl.includes('onrender.com');
         
-        // 确保使用HTTPS（如果页面是HTTPS）
+        // 构建API URL（确保使用HTTPS且无端口号）
         let apiUrl = this.serverBaseUrl;
         
-        // 如果 serverBaseUrl 还是默认值（http://localhost:8081），重新检测
-        if (apiUrl === 'http://localhost:8081' && !isLocal) {
-            console.warn('serverBaseUrl 还是默认值，重新检测...');
-            this.detectServerAddress();
-            apiUrl = this.serverBaseUrl;
+        // 生产环境强制使用HTTPS且移除端口号
+        if (!isLocal) {
+            apiUrl = 'https://maze-game-server-ut3f.onrender.com';
         }
         
-        // 确保使用HTTPS（如果页面是HTTPS）
+        // 确保使用HTTPS（如果页面是HTTPS且是本地环境）
         if (window.location.protocol === 'https:' && apiUrl.startsWith('http://')) {
             apiUrl = apiUrl.replace('http://', 'https://');
         }
@@ -318,33 +324,52 @@ const Multiplayer = {
         }
         
         // 自动配置服务器地址
+        this.detectServerAddress(); // 重新检测确保正确
+        
         const serverInput = document.getElementById('serverInput');
         const configInput = document.getElementById('serverConfigInput');
         let wsAddress = (serverInput ? serverInput.value.trim() : '') || (configInput ? configInput.value.trim() : '');
         
+        // 判断是否为本地环境
+        const hostname = window.location.hostname;
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+        
         // 如果没有配置或配置无效，使用自动检测的地址
         if (!wsAddress || wsAddress === '' || (!wsAddress.startsWith('ws://') && !wsAddress.startsWith('wss://'))) {
-            // 重新检测服务器地址（确保使用正确的地址）
-            const hostname = window.location.hostname;
-            const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
-            
             if (isLocal) {
                 wsAddress = 'ws://localhost:8080';
                 this.serverBaseUrl = 'http://localhost:8081';
             } else {
-                // 生产环境必须使用 wss:// 和 Render 服务器
-                wsAddress = this.defaultServerAddress;
+                // 生产环境必须使用 wss:// 和 Render 服务器（无端口）
+                wsAddress = 'wss://maze-game-server-ut3f.onrender.com';
                 this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
             }
             if (serverInput) serverInput.value = wsAddress;
             if (configInput) configInput.value = wsAddress;
-        }
-        
-        // 确保HTTPS页面使用wss://
-        if (window.location.protocol === 'https:' && wsAddress.startsWith('ws://')) {
-            wsAddress = wsAddress.replace('ws://', 'wss://');
-            if (serverInput) serverInput.value = wsAddress;
-            if (configInput) configInput.value = wsAddress;
+        } else {
+            // 如果已有配置，确保生产环境使用正确的地址
+            if (!isLocal) {
+                // 生产环境强制使用Render服务器
+                if (!wsAddress.includes('onrender.com') || wsAddress.includes(':')) {
+                    wsAddress = 'wss://maze-game-server-ut3f.onrender.com';
+                    this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+                    if (serverInput) serverInput.value = wsAddress;
+                    if (configInput) configInput.value = wsAddress;
+                }
+                // 确保使用wss://
+                if (wsAddress.startsWith('ws://')) {
+                    wsAddress = wsAddress.replace('ws://', 'wss://');
+                    if (serverInput) serverInput.value = wsAddress;
+                    if (configInput) configInput.value = wsAddress;
+                }
+            } else {
+                // 本地环境确保使用ws://
+                if (wsAddress.startsWith('wss://')) {
+                    wsAddress = wsAddress.replace('wss://', 'ws://');
+                    if (serverInput) serverInput.value = wsAddress;
+                    if (configInput) configInput.value = wsAddress;
+                }
+            }
         }
         
         // 确保 serverBaseUrl 也正确设置
@@ -360,36 +385,53 @@ const Multiplayer = {
 
     // 创建新房间
     createNewRoom() {
+        // 重新检测服务器地址确保正确
+        this.detectServerAddress();
+        
         const serverInput = document.getElementById('serverInput');
         const configInput = document.getElementById('serverConfigInput');
         
         let wsAddress = (serverInput ? serverInput.value.trim() : '') || (configInput ? configInput.value.trim() : '');
         
+        // 判断是否为本地环境
+        const hostname = window.location.hostname;
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+        
         if (!wsAddress || wsAddress === '' || (!wsAddress.startsWith('ws://') && !wsAddress.startsWith('wss://'))) {
-            // 重新检测服务器地址（确保使用正确的地址）
-            const hostname = window.location.hostname;
-            const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
-            
             if (isLocal) {
                 wsAddress = 'ws://localhost:8080';
                 this.serverBaseUrl = 'http://localhost:8081';
             } else {
-                // 生产环境必须使用 wss:// 和 Render 服务器
-                wsAddress = this.defaultServerAddress;
+                // 生产环境必须使用 wss:// 和 Render 服务器（无端口）
+                wsAddress = 'wss://maze-game-server-ut3f.onrender.com';
                 this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
             }
             if (serverInput) serverInput.value = wsAddress;
             if (configInput) configInput.value = wsAddress;
         } else {
-            if (serverInput) serverInput.value = wsAddress;
-            if (configInput) configInput.value = wsAddress;
-        }
-        
-        // 确保HTTPS页面使用wss://
-        if (window.location.protocol === 'https:' && wsAddress.startsWith('ws://')) {
-            wsAddress = wsAddress.replace('ws://', 'wss://');
-            if (serverInput) serverInput.value = wsAddress;
-            if (configInput) configInput.value = wsAddress;
+            // 如果已有配置，确保生产环境使用正确的地址
+            if (!isLocal) {
+                // 生产环境强制使用Render服务器
+                if (!wsAddress.includes('onrender.com') || wsAddress.includes(':')) {
+                    wsAddress = 'wss://maze-game-server-ut3f.onrender.com';
+                    this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+                    if (serverInput) serverInput.value = wsAddress;
+                    if (configInput) configInput.value = wsAddress;
+                }
+                // 确保使用wss://
+                if (wsAddress.startsWith('ws://')) {
+                    wsAddress = wsAddress.replace('ws://', 'wss://');
+                    if (serverInput) serverInput.value = wsAddress;
+                    if (configInput) configInput.value = wsAddress;
+                }
+            } else {
+                // 本地环境确保使用ws://
+                if (wsAddress.startsWith('wss://')) {
+                    wsAddress = wsAddress.replace('wss://', 'ws://');
+                    if (serverInput) serverInput.value = wsAddress;
+                    if (configInput) configInput.value = wsAddress;
+                }
+            }
         }
         
         // 确保 serverBaseUrl 也正确设置
@@ -424,17 +466,32 @@ const Multiplayer = {
         const serverInput = document.getElementById('serverInput');
         if (serverInput) serverInput.value = serverAddress;
         
+        // 判断是否为本地环境
+        const hostname = window.location.hostname;
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+        
         // 更新 serverBaseUrl - 支持 ws:// 和 wss://
         const wsMatch = serverAddress.match(/(?:ws|wss):\/\/([^:]+)(?::(\d+))?/);
         if (wsMatch) {
             const host = wsMatch[1];
-            const port = wsMatch[2] || (serverAddress.startsWith('wss://') ? '443' : '80');
-            const protocol = serverAddress.startsWith('wss://') || window.location.protocol === 'https:' ? 'https' : 'http';
             
-            // Render服务器特殊处理
+            // Render服务器特殊处理（无端口）
             if (host.includes('onrender.com')) {
                 this.serverBaseUrl = 'https://maze-game-server-ut3f.onrender.com';
+                // 确保WebSocket地址也是正确的（无端口）
+                if (serverAddress.includes(':')) {
+                    const correctedAddress = 'wss://maze-game-server-ut3f.onrender.com';
+                    if (serverInput) serverInput.value = correctedAddress;
+                    if (configInput) configInput.value = correctedAddress;
+                }
+            } else if (isLocal) {
+                // 本地环境
+                const port = wsMatch[2] || '8080';
+                this.serverBaseUrl = `http://localhost:${parseInt(port) + 1}`;
             } else {
+                // 其他生产环境（理论上不应该到这里，但保留兼容性）
+                const port = wsMatch[2] || (serverAddress.startsWith('wss://') ? '443' : '80');
+                const protocol = serverAddress.startsWith('wss://') || window.location.protocol === 'https:' ? 'https' : 'http';
                 this.serverBaseUrl = `${protocol}://${host}:${parseInt(port) + 1}`;
             }
         }
@@ -470,6 +527,28 @@ const Multiplayer = {
         const joinBtn = document.getElementById('join-btn');
         
         this.roomId = roomId;
+        
+        // 最终验证和修复WebSocket地址
+        const hostname = window.location.hostname;
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === 'file';
+        
+        if (!isLocal) {
+            // 生产环境：强制使用Render服务器，确保使用wss://且无端口
+            if (!serverAddress.includes('onrender.com')) {
+                serverAddress = 'wss://maze-game-server-ut3f.onrender.com';
+            } else if (serverAddress.includes(':')) {
+                // 移除端口号
+                serverAddress = 'wss://maze-game-server-ut3f.onrender.com';
+            } else if (serverAddress.startsWith('ws://')) {
+                // 确保使用wss://
+                serverAddress = serverAddress.replace('ws://', 'wss://');
+            }
+        } else {
+            // 本地环境：确保使用ws://
+            if (serverAddress.startsWith('wss://')) {
+                serverAddress = serverAddress.replace('wss://', 'ws://');
+            }
+        }
         
         // 检查是否为生产环境（Render服务器）
         const isRenderServer = serverAddress && serverAddress.includes('onrender.com');
